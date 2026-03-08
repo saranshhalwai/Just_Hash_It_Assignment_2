@@ -86,3 +86,26 @@ char* rpc_get_result(const char* json) {
     cJSON_Delete(root);
     return output;
 }
+
+char* rpc_get_hex(const char* json) {
+
+    cJSON *root = cJSON_Parse(json);
+    if (!root) return NULL;
+
+    cJSON *result = cJSON_GetObjectItem(root, "result");
+    if (!result) {
+        cJSON_Delete(root);
+        return NULL;
+    }
+
+    cJSON *hex = cJSON_GetObjectItem(result, "hex");
+    if (!hex) {
+        cJSON_Delete(root);
+        return NULL;
+    }
+
+    char *output = strdup(hex->valuestring);
+
+    cJSON_Delete(root);
+    return output;
+}
