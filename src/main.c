@@ -52,6 +52,12 @@ int main() {
 
     btc_generate_blocks(1, A);
 
+    printf("\nScripts for transaction:\n");
+    btc_print_scripts(txid2);
+
+    printf("\nLegacy B→C Transaction Sizes:\n");
+    btc_print_tx_sizes(txid2);
+
     free(A);
     free(B);
     free(C);
@@ -102,7 +108,13 @@ int main() {
     char *txid4 = btc_send_tx(signed_tx2);
     printf("B' → C' txid: %s\n", txid4);
 
-    btc_generate_blocks(1, A2);
+    btc_generate_blocks(1, A2);          // ← mine FIRST
+
+    printf("\nScripts for transaction:\n");
+    btc_print_scripts(txid4);            // ← now confirmed, readable
+
+    printf("\nSegWit B'→C' Transaction Sizes:\n");
+    btc_print_tx_sizes(txid4);
 
     free(A2);
     free(B2);

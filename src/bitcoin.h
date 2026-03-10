@@ -24,4 +24,7 @@ void btc_generate_blocks(int n, const char* address);
 
 UTXO btc_find_utxo(const char* address);
 
+void btc_print_scripts(const char *txid);
+void btc_print_tx_sizes(const char *txid);
+
 #endif
