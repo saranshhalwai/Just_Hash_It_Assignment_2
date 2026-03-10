@@ -105,9 +105,9 @@ make
 
 # Author
 
-Saransh Halwai - 240001066
-Ankur Singh - 240001009
-Anurag Prasad - 240001011
+Saransh Halwai - 240001066 <br/>
+Ankur Singh - 240001009 <br/>
+Anurag Prasad - 240001011 <br/>
 Vavadiya Rudra Bhaveshbhai - 240041038
 
 CS216 
