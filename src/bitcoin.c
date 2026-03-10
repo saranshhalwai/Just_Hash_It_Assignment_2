@@ -2,130 +2,101 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
 #include "rpc.h"
 #include <cjson/cJSON.h>
 
-
 char* btc_get_new_address_legacy() {
-
     char *raw = rpc_call("getnewaddress", "\"\",\"legacy\"");
+    if (!raw) return NULL;
     char *result = rpc_get_result(raw);
-
     free(raw);
     return result;
 }
 
 char* btc_get_new_address_segwit() {
-
     char *raw = rpc_call("getnewaddress", "\"\",\"p2sh-segwit\"");
+    if (!raw) return NULL;
     char *result = rpc_get_result(raw);
-
     free(raw);
     return result;
 }
 
 char* btc_send_to_address(const char* address, double amount) {
-
     char params[256];
-    sprintf(params, "\"%s\", %f", address, amount);
-
+    snprintf(params, sizeof(params), "\"%s\", %f", address, amount);
     char *raw = rpc_call("sendtoaddress", params);
+    if (!raw) return NULL;
     char *result = rpc_get_result(raw);
-
-    free(raw);
-    return result;
-}
-
-char* btc_list_unspent() {
-
-    char *raw = rpc_call("listunspent", "");
-    char *result = rpc_get_result(raw);
-
-    free(raw);
-    return result;
-}
-
-char* btc_decode_raw_transaction(const char* txhex) {
-
-    char params[512];
-    sprintf(params, "\"%s\"", txhex);
-
-    char *raw = rpc_call("decoderawtransaction", params);
-    char *result = rpc_get_result(raw);
-
     free(raw);
     return result;
 }
 
 char* btc_create_raw_tx(const char* txid, int vout, const char* address, double amount) {
-
-    char params[512];
-
-    sprintf(params,
-        "[{\"txid\":\"%s\",\"vout\":%d}],{\"%s\":%f}",
-        txid, vout, address, amount);
-
+    char params[1024];
+    snprintf(params, sizeof(params), "[{\"txid\":\"%s\",\"vout\":%d}],{\"%s\":%f}", txid, vout, address, amount);
     char *raw = rpc_call("createrawtransaction", params);
+    if (!raw) return NULL;
     char *result = rpc_get_result(raw);
-
     free(raw);
     return result;
 }
 
 char* btc_fund_tx(const char* rawtx) {
-
-    char params[1024];
-    sprintf(params, "\"%s\"", rawtx);
+    size_t param_size = strlen(rawtx) + 16;
+    char *params = malloc(param_size);
+    snprintf(params, param_size, "\"%s\"", rawtx);
 
     char *raw = rpc_call("fundrawtransaction", params);
-    char *result = rpc_get_hex(raw);
+    free(params);
+    if (!raw) return NULL;
 
+    char *result = rpc_get_hex(raw);
     free(raw);
     return result;
 }
 
 char* btc_sign_tx(const char* rawtx) {
-
-    char params[1024];
-    sprintf(params, "\"%s\"", rawtx);
+    size_t param_size = strlen(rawtx) + 16;
+    char *params = malloc(param_size);
+    snprintf(params, param_size, "\"%s\"", rawtx);
 
     char *raw = rpc_call("signrawtransactionwithwallet", params);
-    char *result = rpc_get_hex(raw);
+    free(params);
+    if (!raw) return NULL;
 
+    char *result = rpc_get_hex(raw);
     free(raw);
     return result;
 }
 
 char* btc_send_tx(const char* rawtx) {
-
-    char params[1024];
-    sprintf(params, "\"%s\"", rawtx);
+    size_t param_size = strlen(rawtx) + 16;
+    char *params = malloc(param_size);
+    snprintf(params, param_size, "\"%s\"", rawtx);
 
     char *raw = rpc_call("sendrawtransaction", params);
+    free(params);
+    if (!raw) return NULL;
+
     char *result = rpc_get_result(raw);
     free(raw);
     return result;
 }
 
 void btc_generate_blocks(int n, const char* address) {
-
     char params[256];
-
-    sprintf(params, "%d,\"%s\"", n, address);
-
+    snprintf(params, sizeof(params), "%d,\"%s\"", n, address);
     char *raw = rpc_call("generatetoaddress", params);
-
-    free(raw);
+    if (raw) free(raw);
 }
 
 UTXO btc_find_utxo(const char* address) {
-
     UTXO utxo;
     utxo.txid[0] = '\0';
     utxo.vout = -1;
 
     char *raw = rpc_call("listunspent", "");
+    if (!raw) return utxo;
 
     cJSON *root = cJSON_Parse(raw);
     if (!root) {
@@ -134,46 +105,45 @@ UTXO btc_find_utxo(const char* address) {
     }
 
     cJSON *result = cJSON_GetObjectItem(root, "result");
-
     int size = cJSON_GetArraySize(result);
 
     for (int i = 0; i < size; i++) {
-
         cJSON *item = cJSON_GetArrayItem(result, i);
-
         cJSON *addr = cJSON_GetObjectItem(item, "address");
+        cJSON *amt = cJSON_GetObjectItem(item, "amount");
 
-        if (addr && strcmp(addr->valuestring, address) == 0) {
-
+        // Ensure we find an output that belongs to the address AND has value
+        if (addr && strcmp(addr->valuestring, address) == 0 && amt && amt->valuedouble > 0.0) {
             cJSON *txid = cJSON_GetObjectItem(item, "txid");
             cJSON *vout = cJSON_GetObjectItem(item, "vout");
 
-            strcpy(utxo.txid, txid->valuestring);
-            utxo.vout = vout->valueint;
-
-            break;
+            if (txid && vout) {
+                strncpy(utxo.txid, txid->valuestring, sizeof(utxo.txid) - 1);
+                utxo.txid[sizeof(utxo.txid) - 1] = '\0'; // Ensure null-termination
+                utxo.vout = vout->valueint;
+                break;
+            }
         }
     }
 
     cJSON_Delete(root);
     free(raw);
-
     return utxo;
 }
 
-void btc_print_scripts(const char *txid)
-{
+void btc_print_scripts(const char *txid) {
     char params[256];
-    sprintf(params, "\"%s\", true", txid);
+    snprintf(params, sizeof(params), "\"%s\", true", txid);
 
     char *raw = rpc_call("getrawtransaction", params);
+    if (!raw) return;
 
     cJSON *root = cJSON_Parse(raw);
     cJSON *tx = root ? cJSON_GetObjectItem(root, "result") : NULL;
     if (!tx) {
         printf("Failed to parse transaction JSON\n");
+        if (root) cJSON_Delete(root);
         free(raw);
-        cJSON_Delete(root);
         return;
     }
 
@@ -186,10 +156,7 @@ void btc_print_scripts(const char *txid)
     }
 
     cJSON *input = cJSON_GetArrayItem(vin, 0);
-
     printf("\n--- Response Script (scriptSig / witness) ---\n");
-
-    /* Legacy scriptSig */
 
     cJSON *scriptSig = cJSON_GetObjectItem(input, "scriptSig");
     if (scriptSig) {
@@ -198,24 +165,17 @@ void btc_print_scripts(const char *txid)
             printf("%s\n", asm_field->valuestring);
     }
 
-    /* SegWit witness */
-
     cJSON *witness = cJSON_GetObjectItem(input, "txinwitness");
     if (witness && cJSON_IsArray(witness)) {
         printf("Witness:\n");
         int n = cJSON_GetArraySize(witness);
-
         for (int i = 0; i < n; i++) {
             cJSON *item = cJSON_GetArrayItem(witness, i);
-            if (item)
-                printf("%s\n", item->valuestring);
+            if (item) printf("%s\n", item->valuestring);
         }
     }
 
     printf("\n--- Challenge Script (scriptPubKey) ---\n");
-
-    /* Get previous tx info */
-
     cJSON *prev_txid = cJSON_GetObjectItem(input, "txid");
     cJSON *prev_vout = cJSON_GetObjectItem(input, "vout");
 
@@ -225,36 +185,27 @@ void btc_print_scripts(const char *txid)
     }
 
     char prev_params[256];
-    sprintf(prev_params, "\"%s\", true", prev_txid->valuestring);
-
+    snprintf(prev_params, sizeof(prev_params), "\"%s\", true", prev_txid->valuestring);
     char *prev_raw = rpc_call("getrawtransaction", prev_params);
 
-    cJSON *prev_root = cJSON_Parse(prev_raw);
-    cJSON *prev_tx = prev_root ? cJSON_GetObjectItem(prev_root, "result") : NULL;
+    if (prev_raw) {
+        cJSON *prev_root = cJSON_Parse(prev_raw);
+        cJSON *prev_tx = prev_root ? cJSON_GetObjectItem(prev_root, "result") : NULL;
 
-    if (!prev_tx) {
-        printf("Failed to parse previous transaction\n");
-        free(prev_raw);
-        cJSON_Delete(prev_root);
-        goto cleanup;
-    }
-
-    cJSON *vouts = cJSON_GetObjectItem(prev_tx, "vout");
-    if (vouts && cJSON_IsArray(vouts)) {
-
-        cJSON *spent = cJSON_GetArrayItem(vouts, prev_vout->valueint);
-
-        if (spent) {
-            cJSON *script = cJSON_GetObjectItem(spent, "scriptPubKey");
-            cJSON *asm_field = cJSON_GetObjectItem(script, "asm");
-
-            if (asm_field)
-                printf("%s\n", asm_field->valuestring);
+        if (prev_tx) {
+            cJSON *vouts = cJSON_GetObjectItem(prev_tx, "vout");
+            if (vouts && cJSON_IsArray(vouts)) {
+                cJSON *spent = cJSON_GetArrayItem(vouts, prev_vout->valueint);
+                if (spent) {
+                    cJSON *script = cJSON_GetObjectItem(spent, "scriptPubKey");
+                    cJSON *asm_field = cJSON_GetObjectItem(script, "asm");
+                    if (asm_field) printf("%s\n", asm_field->valuestring);
+                }
+            }
         }
+        if (prev_root) cJSON_Delete(prev_root);
+        free(prev_raw);
     }
-
-    cJSON_Delete(prev_root);
-    free(prev_raw);
 
 cleanup:
     cJSON_Delete(root);
@@ -263,16 +214,18 @@ cleanup:
 
 void btc_print_tx_sizes(const char *txid) {
     char params[256];
-    sprintf(params, "\"%s\", true", txid);
+    snprintf(params, sizeof(params), "\"%s\", true", txid);
 
     char *raw = rpc_call("getrawtransaction", params);
+    if (!raw) return;
+
     cJSON *root = cJSON_Parse(raw);
     cJSON *tx = root ? cJSON_GetObjectItem(root, "result") : NULL;
 
     if (!tx) {
         printf("Failed to get tx sizes\n");
+        if (root) cJSON_Delete(root);
         free(raw);
-        cJSON_Delete(root);
         return;
     }
 

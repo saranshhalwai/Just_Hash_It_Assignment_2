@@ -3,10 +3,16 @@
 #include "bitcoin.h"
 
 int main() {
-
     printf("===== LEGACY TEST =====\n");
 
     char *A = btc_get_new_address_legacy();
+
+    // Safety check: Make sure node is connected
+    if (!A) {
+        printf("Error: Could not connect to bitcoind. Check your bitcoin.conf credentials and ensure the node is running.\n");
+        return 1;
+    }
+
     char *B = btc_get_new_address_legacy();
     char *C = btc_get_new_address_legacy();
 
@@ -15,29 +21,23 @@ int main() {
     printf("C: %s\n", C);
 
     /* Fund wallet so A has coins */
-
     printf("Mining blocks to fund wallet...\n");
     btc_generate_blocks(101, A);
 
     /* A → B */
-
     char *txid1 = btc_send_to_address(B, 1.0);
     printf("A → B txid: %s\n", txid1);
 
     /* Confirm transaction */
-
     btc_generate_blocks(1, A);
 
     /* Find UTXO for B */
-
     UTXO utxo = btc_find_utxo(B);
-
     printf("UTXO for B:\n");
     printf("txid: %s\n", utxo.txid);
     printf("vout: %d\n", utxo.vout);
 
     /* B → C raw transaction */
-
     char *raw = btc_create_raw_tx(utxo.txid, utxo.vout, C, 0.9);
     printf("Raw tx: %s\n", raw);
 
@@ -61,11 +61,11 @@ int main() {
     free(A);
     free(B);
     free(C);
-    free(txid1);
-    free(raw);
-    free(funded);
-    free(signed_tx);
-    free(txid2);
+    if(txid1) free(txid1);
+    if(raw) free(raw);
+    if(funded) free(funded);
+    if(signed_tx) free(signed_tx);
+    if(txid2) free(txid2);
 
     printf("\n===== SEGWIT TEST =====\n");
 
@@ -80,22 +80,18 @@ int main() {
     btc_generate_blocks(101, A2);
 
     /* A' → B' */
-
     char *txid3 = btc_send_to_address(B2, 1.0);
     printf("A' → B' txid: %s\n", txid3);
 
     btc_generate_blocks(1, A2);
 
     /* Find UTXO for B' */
-
     UTXO utxo2 = btc_find_utxo(B2);
-
     printf("UTXO for B':\n");
     printf("txid: %s\n", utxo2.txid);
     printf("vout: %d\n", utxo2.vout);
 
     /* B' → C' */
-
     char *raw2 = btc_create_raw_tx(utxo2.txid, utxo2.vout, C2, 0.9);
     printf("Raw tx: %s\n", raw2);
 
@@ -119,11 +115,11 @@ int main() {
     free(A2);
     free(B2);
     free(C2);
-    free(txid3);
-    free(raw2);
-    free(funded2);
-    free(signed_tx2);
-    free(txid4);
+    if(txid3) free(txid3);
+    if(raw2) free(raw2);
+    if(funded2) free(funded2);
+    if(signed_tx2) free(signed_tx2);
+    if(txid4) free(txid4);
 
     return 0;
 }

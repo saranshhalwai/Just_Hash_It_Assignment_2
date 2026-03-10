@@ -6,7 +6,7 @@
 #include <cjson/cJSON.h>
 
 #define RPC_URL "http://127.0.0.1:18443"
-#define RPC_USERPWD "saransh:12345678"   // change to your bitcoin.conf credentials
+#define RPC_USERPWD "saransh:12345678"   // Your bitcoin.conf credentials
 
 struct Memory {
     char *data;
@@ -27,7 +27,6 @@ static size_t write_callback(void *contents, size_t size, size_t nmemb, void *us
 }
 
 char* rpc_call(const char* method, const char* params) {
-
     CURL *curl;
     CURLcode res;
 
@@ -35,28 +34,41 @@ char* rpc_call(const char* method, const char* params) {
     chunk.data = malloc(1);
     chunk.size = 0;
 
-    char json[1024];
+    // Fix: Dynamically allocate the JSON string to prevent buffer overflows
+    size_t json_len = strlen(method) + (params ? strlen(params) : 0) + 128;
+    char *json = malloc(json_len);
+    if (!json) return NULL;
 
-    sprintf(json,
+    snprintf(json, json_len,
         "{\"jsonrpc\":\"1.0\",\"id\":\"curl\",\"method\":\"%s\",\"params\":[%s]}",
-        method, params);
+        method, params ? params : "");
 
     curl = curl_easy_init();
+    if (!curl) {
+        free(json);
+        return NULL;
+    }
 
-    if (!curl) return NULL;
+    // Fix: Explicitly declare the content type for Bitcoin Core
+    struct curl_slist *headers = NULL;
+    headers = curl_slist_append(headers, "content-type: application/json;");
 
     curl_easy_setopt(curl, CURLOPT_URL, RPC_URL);
     curl_easy_setopt(curl, CURLOPT_USERPWD, RPC_USERPWD);
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, json);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_callback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&chunk);
 
     res = curl_easy_perform(curl);
 
+    curl_slist_free_all(headers);
     curl_easy_cleanup(curl);
+    free(json);
 
     if (res != CURLE_OK) {
-        fprintf(stderr, "RPC request failed\n");
+        fprintf(stderr, "RPC request failed: %s\n", curl_easy_strerror(res));
+        free(chunk.data);
         return NULL;
     }
 
@@ -64,19 +76,18 @@ char* rpc_call(const char* method, const char* params) {
 }
 
 char* rpc_get_result(const char* json) {
+    if (!json || strlen(json) == 0) return NULL; // Fix: Prevent NULL parse crashes
 
     cJSON *root = cJSON_Parse(json);
     if (!root) return NULL;
 
     cJSON *result = cJSON_GetObjectItem(root, "result");
-
     if (!result) {
         cJSON_Delete(root);
         return NULL;
     }
 
     char *output = NULL;
-
     if (cJSON_IsString(result)) {
         output = strdup(result->valuestring);
     } else {
@@ -88,6 +99,7 @@ char* rpc_get_result(const char* json) {
 }
 
 char* rpc_get_hex(const char* json) {
+    if (!json || strlen(json) == 0) return NULL; // Fix: Prevent NULL parse crashes
 
     cJSON *root = cJSON_Parse(json);
     if (!root) return NULL;
